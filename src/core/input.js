@@ -34,8 +34,9 @@ export class Input {
     this.lastDevice = 'kbm';
     // touch controls (written by touch.js): stick -1..1 (y down = back), aim deltas in CSS px this frame, buttons held,
     // `*Tap` = pressed since the last frame (a tap shorter than a frame still registers), `map` = map toggled open,
-    // `tap` = a screen tap {x, y} this frame while the map is open (Super Jump pins)
-    this.touch = { stick: { x: 0, y: 0, mag: 0 }, aimDx: 0, aimDy: 0, fire: false, squid: false, jump: false, jumpTap: false, sub: false, special: false, specialTap: false, map: false, tap: null };
+    // `tap` = a screen tap {x, y} this frame while the map is open (Super Jump pins), `aimStick` = a held FIRE / SWIM
+    // finger's slide as a right stick (-1..1)
+    this.touch = { stick: { x: 0, y: 0, mag: 0 }, aimStick: { x: 0, y: 0, mag: 0 }, aimDx: 0, aimDy: 0, fire: false, squid: false, jump: false, jumpTap: false, sub: false, special: false, specialTap: false, map: false, tap: null };
     this.touchMode = false;
     this.onKey = null;              // (e) => bool consumed  (menus)
     window.addEventListener('keydown', (e) => {

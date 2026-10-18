@@ -27,7 +27,8 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { G, damp, lerp, rng } from '../core/ctx.js';
-import { WEAPONS } from '../config.js';
+import { WEAPONS, WEAPON_ORDER } from '../config.js';
+import { isTouchDevice } from '../core/touch.js';
 
 // ================================================================================================ helpers
 const TAU = Math.PI * 2;
@@ -1604,7 +1605,7 @@ export class Showcase {
   _lobLoad(L) {
     import('./lobbySet.js').then(async (mod) => {
       if (this.lob !== L) return;
-      const q = G.settings?.quality || 'high';
+      const q = lobQuality();
       const set = new mod.LobbySet(this.r, { quality: q, texlib: G.game?.texlib || null });
       L.set = set; L.quality = q;
       L.scene.add(set.root);
@@ -1612,18 +1613,38 @@ export class Showcase {
       if (this.lob !== L) { set.dispose(); return; }
       this._lobDecks(L);
       this._lobColors();
-      const warm = new this.CharacterClass({ color: L.colors[0].clone(), weapon: 'shooter', style: this._profileStyle(), name: 'warm', isLocal: false });
-      warm.root.position.copy(set.hubSpot.pos);
-      L.kids.add(warm.root);
-      warm.update(1 / 30, this._anim());
-      if (warm.kid) warm.kid.visible = true;
-      if (warm.squidRoot) warm.squidRoot.visible = true;
       const C = set.camera;
       this._placeLook(L.cam, C.pos, C.target, C.fov, innerWidth / 2, innerHeight / 2, innerWidth, innerHeight);
       this._lobEnv(L);
+      // One warm kid per weapon kind, compiled under the set's own lights (every detail tier, squid form, weapon) and
+      // then KEPT, hidden, for as long as the set lives: a shader program is deleted as soon as no material uses it, so
+      // warming a kid and disposing it compiled nothing that lasted — the room's first frame then compiled every kid
+      // shader synchronously (the iPad's long freeze on CREATE A ROOM; Safari compiles on the main thread).
+      L.warm = [];
+      for (const w of WEAPON_ORDER) {
+        const k = new this.CharacterClass({ color: L.colors[0].clone(), weapon: w, style: this._profileStyle(), name: 'warm', isLocal: false });
+        k.root.position.copy(set.hubSpot.pos);
+        L.kids.add(k.root);
+        k.update(1 / 30, this._anim());
+        if (k.kid) k.kid.visible = true;
+        if (k.squidRoot) k.squidRoot.visible = true;
+        L.warm.push(k);
+      }
+      // the set + the FX a room shows (ink splats / rings, trail, sparkles, contact shadows — hidden until then)
+      const vis = [];
+      L.fxRoot.traverse((o) => { vis.push(o, o.visible); o.visible = true; });
       try { if (this.r.compileAsync) await this.r.compileAsync(L.scene, L.cam); else this.r.compile(L.scene, L.cam); } catch (e) { console.warn('[showcase] lobby set warm-up', e); }
-      L.kids.remove(warm.root); warm.dispose?.();
+      for (let i = 0; i < vis.length; i += 2) vis[i].visible = vis[i + 1];
+      for (const k of L.warm) {
+        if (this.lob !== L) return;
+        try { if (k.warmAll) await k.warmAll(this.r, L.cam, L.scene); } catch (e) { console.warn('[showcase] lobby kid warm-up', e); }
+        k.root.visible = false;
+      }
       if (this.lob !== L) return;
+      // without KHR_parallel_shader_compile (Safari) compile() only queues the work: the driver links each program at
+      // its first status query, i.e. the first draw — the room's first frame. Query them now, one per frame (newest, the
+      // lobby's own, first), so that cost lands in small slices while the menus idle instead of in one long freeze.
+      L.linkQ = this.r.info.programs.slice();
       L.ready = true;
     }).catch((e) => { console.error('[showcase] lobby set', e); L.failed = true; });
   }
@@ -1654,6 +1675,8 @@ export class Showcase {
     this.lob = null;
     for (const M of L.members.values()) if (M.c) { M.c.dispose?.(); M.c = null; }
     L.members.clear();
+    for (const k of L.warm || []) k.dispose?.();
+    L.warm = null;
     if (L.set) { L.set.dispose(); L.set = null; }
     for (const f of L.fx) { f.mesh.geometry.dispose(); f.splats.geometry.dispose(); f.rings.geometry.dispose(); }
     for (const m of L.ink) m.dispose();
@@ -2093,6 +2116,7 @@ export class Showcase {
   _updateSet(dt) {
     const L = this.lob;
     if (!L) return;
+    if (L.linkQ) { const pg = L.linkQ.pop(); try { pg?.getUniforms?.(); } catch (e) { /* lost context etc. */ } if (!L.linkQ.length) L.linkQ = null; }
     const on = SET_MODES.has(this.mode);
     L.k = on && L.ready ? Math.min(1, L.k + dt / SET_FADE) : Math.max(0, L.k - dt / SET_FADE);
     if (!on && L.k <= 0) {
@@ -2109,7 +2133,7 @@ export class Showcase {
     L.preload = false;       // shown once: from here on it follows the normal parked / released rules
     if (!L.ready) return;
     const S = L.set;
-    const q = G.settings?.quality;
+    const q = lobQuality();
     if (q && q !== L.quality) { L.quality = q; S.setQuality?.(q); }
     L.t += dt;
     L.shotT += dt;
@@ -3096,6 +3120,9 @@ function domBox(sel) {
   for (let e = el; e; e = e.offsetParent) { x += e.offsetLeft; y += e.offsetTop; }
   return { l: x, t: y, r: x + el.offsetWidth, b: y + el.offsetHeight };
 }
+// touch devices (iPads / phones) always get the Low set (no planar reflection, small shadow map, no extra lights),
+// whatever the in-match quality: the lobby is a backdrop and must stay light there
+const lobQuality = () => (isTouchDevice() ? 'low' : (G.settings?.quality || 'high'));
 const styleKey = (st) => (st && typeof st === 'object' ? Object.keys(st).sort().map((k) => `${k}:${st[k]}`).join('|') : '');
 const weaponKind = (id) => (WEAPONS[id] && WEAPONS[id].kind) || id || 'shooter';
 function copyCanvas(src) {

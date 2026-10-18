@@ -1,7 +1,7 @@
 // INKWAVE UI — inline SVG icon set, input glyphs, logo and illustrations.
 // Everything is a markup string (cheap to clone via innerHTML) using currentColor / CSS classes for team ink:
 //   .iw-fa = accent/team A ink, .iw-fb = accent/team B ink (see ui.css).
-import { esc, splatShape, blobPath } from './ui-util.js';
+import { esc, splatShape } from './ui-util.js';
 
 const K = '#15121c';        // outline ink
 const DK = '#2b2735';       // dark plastic
@@ -330,41 +330,6 @@ export function mapThumb(map, seed = 3) {
     ${lights}
   </svg>`;
 }
-
-// ------------------------------------------------------------------ how-to illustrations (120 x 80)
-export const RULE_ART = {
-  turf: `<svg viewBox="0 0 120 80" aria-hidden="true">
-    <path d="M10 60 L60 34 L110 60 L60 78 Z" fill="#f4ecdc" stroke="${K}" stroke-width="2.5" stroke-linejoin="round"/>
-    <path class="iw-fa" d="${blobPath(46, 58, 16, { seed: 4, sy: 0.55, points: 10, wobble: 0.22 })}"/>
-    <path class="iw-fa" d="${blobPath(64, 47, 9, { seed: 9, sy: 0.55, points: 8, wobble: 0.25 })}"/>
-    <path class="iw-fb" d="${blobPath(84, 58, 8, { seed: 5, sy: 0.55, points: 8, wobble: 0.25 })}"/>
-    <g transform="translate(18 8)"><rect width="84" height="13" rx="6.5" fill="${K}"/><rect x="3" y="3" width="52" height="7" rx="3.5" class="iw-fa"/><rect x="55" y="3" width="26" height="7" rx="3.5" class="iw-fb"/></g>
-    <path d="M60 22 L60 30" stroke="#fff" stroke-width="2.5" stroke-dasharray="2 3"/>
-  </svg>`,
-  swim: `<svg viewBox="0 0 120 80" aria-hidden="true">
-    <path class="iw-fa" d="${blobPath(60, 58, 44, { seed: 12, sy: 0.3, points: 12, wobble: 0.12 })}"/>
-    <g transform="translate(40 26) scale(.62)" style="color:var(--a)">${SQUID.replace('class="iw-ico iw-squid"', 'x="0" y="0" width="64" height="64"')}</g>
-    <path d="M18 42 L32 42 M12 50 L30 50 M20 58 L34 58" stroke="#fff" stroke-width="3.5" stroke-linecap="round"/>
-    <g transform="translate(88 14)"><rect width="16" height="34" rx="8" fill="#fff" stroke="${K}" stroke-width="2.5"/><rect x="3" y="12" width="10" height="19" rx="5" class="iw-fa"/><path d="M8 -2 L8 8 M4 3 L8 -2 L12 3" stroke="#fff" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/></g>
-  </svg>`,
-  enemy: `<svg viewBox="0 0 120 80" aria-hidden="true">
-    <path class="iw-fb" d="${blobPath(58, 60, 44, { seed: 31, sy: 0.3, points: 11, wobble: 0.14 })}"/>
-    <g transform="translate(36 22) scale(.62)" style="color:var(--a)">${SQUID.replace('class="iw-ico iw-squid"', 'x="0" y="0" width="64" height="64"')}</g>
-    <path d="M78 16 q4 6 0 9 q-4 -3 0 -9z" fill="#9fe3ff" stroke="${K}" stroke-width="1.8"/>
-    <g transform="translate(86 34)"><rect width="26" height="16" rx="8" fill="${K}"/><text x="13" y="12" text-anchor="middle" font-family="Rubik, sans-serif" font-weight="900" font-size="10" fill="#ff5a6a">HP</text></g>
-    <path d="M92 58 L100 58 M96 54 L96 62" stroke="#fff" stroke-width="0" />
-    <path d="M18 28 l6 6 m0 -6 l-6 6" stroke="#fff" stroke-width="3" stroke-linecap="round"/>
-  </svg>`,
-  climb: `<svg viewBox="0 0 120 80" aria-hidden="true">
-    <path d="M58 6 L102 6 L102 76 L58 76 Z" fill="#e8dcc6" stroke="${K}" stroke-width="2.5" stroke-linejoin="round"/>
-    <path d="M58 6 L50 12 L50 80 L58 76 Z" fill="#cdbd9f" stroke="${K}" stroke-width="2.5" stroke-linejoin="round"/>
-    <path class="iw-fa" d="M68 76 L68 20 Q68 12 76 12 Q86 12 86 22 L86 76 Z"/>
-    <path class="iw-fa" d="M66 34 q-6 2 -5 8 q4 -2 5 -8z M88 50 q6 2 5 8 q-4 -2 -5 -8z"/>
-    <g transform="translate(62 30) scale(.4)" style="color:var(--a-light, #fff)">${SQUID.replace('class="iw-ico iw-squid"', 'x="0" y="0" width="64" height="64"')}</g>
-    <path d="M36 62 L36 22 M28 30 L36 20 L44 30" stroke="#fff" stroke-width="5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
-    <path d="M36 62 L36 22 M28 30 L36 20 L44 30" stroke="${K}" stroke-width="1.5" fill="none" stroke-linecap="round" stroke-linejoin="round" opacity=".4"/>
-  </svg>`,
-};
 
 // ------------------------------------------------------------------ helpers
 export const weaponIcon = (idOrKind) => WEAPON_ICONS[idOrKind] || WEAPON_ICONS.shooter;

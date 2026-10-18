@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { G, on, emit, clamp, damp } from './core/ctx.js';
 import { Renderer } from './core/renderer.js';
 import { Input } from './core/input.js';
-import { TouchControls } from './core/touch.js';
+import { TouchControls, isTouchDevice } from './core/touch.js';
 import { mapTheme,
   DEFAULT_SETTINGS, QUALITY, TEAM_PALETTES, COLORBLIND_PALETTE, TEAM_NAMES, WEAPONS, WEAPON_ORDER, SUB, SPECIALS,
   MAPS, DIFFICULTY, PLAYER, PROGRESSION, VERSION, MATCH, OFFLINE_MAPS, mapOfflineOk, mapNoBots, mapBossOk,
@@ -54,6 +54,8 @@ class Game {
     this.settings = G.settings = loadJSON('inkwave.settings', DEFAULT_SETTINGS);
     // v1.1: fov became horizontal — migrate old vertical values once
     if (this.settings.fovMode !== 'h') { this.settings.fov = DEFAULT_SETTINGS.fov; this.settings.fovMode = 'h'; saveJSON('inkwave.settings', this.settings); }
+    // every start comes up on the Low preset (the family's validated one); a change in Settings lasts for this session
+    this.settings.quality = 'low';
     this.profile = loadJSON('inkwave.profile', DEFAULT_PROFILE);
     const app = document.getElementById('app');
     this.uiRoot = document.getElementById('ui-root');
@@ -368,7 +370,7 @@ class Game {
     if (s === 'loadout') this.showcase.showLoadout(this.profile.weapon || 'shooter', G.teamColors[0], this.profile.style);
     else if (s !== 'results') { if (this.showcase.mode === 'loadout') this.showcase.hide(); }
     if (G.mode === 'menu') {
-      if (s === 'title' || s === 'main' || s === 'setup' || s === 'settings' || s === 'howto' || s === 'credits' || s === 'loadout' || s === 'locker' || s === 'online' || s === 'lobby') {
+      if (s === 'title' || s === 'main' || s === 'setup' || s === 'settings' || s === 'loadout' || s === 'locker' || s === 'online' || s === 'lobby') {
         if (this._musicTrack !== (s === 'title' ? 'title' : 'menu')) this._playMusic(s === 'title' ? 'title' : 'menu');
       }
     }
@@ -905,6 +907,7 @@ class Game {
     this._padMenus();
     G.net?.update?.(dt);
     const m = this.match;
+    this.R.setMenuCap(G.mode !== 'match' && isTouchDevice());   // menus / lobby on a touch device: Low pixel ratio
     this.touch?.update(!!(m && !m.attract && !m.paused && G.mode === 'match' && (m.state === 'playing' || m.state === 'intro') && !this.menus?.current), this.settings);
     // the online lobby / hub stand in their own full-frame set (showcase): the attract match behind them is neither
     // simulated nor drawn while it's covered — it resumes exactly where it was when the set fades away

@@ -863,13 +863,6 @@ function previewLength(ctx) {
   return { el, set };
 }
 
-function previewLink() {
-  const el = h('div', { class: 'iw-pv iw-pv--link', html: `<div class="iw-pv-link__art"><i>${GLYPHS.keyboard}</i><i>${GLYPHS.gamepad}</i></div>
-    <div class="iw-pv-link__keys">${keycap('W')}${keycap('A')}${keycap('S')}${keycap('D')}<em>+</em>${mouseGlyph('L')}<em>·</em>${padGlyph('LS')}${padGlyph('RT')}</div>
-    <div class="iw-pv-cap">Every binding for <b>keyboard, mouse and controller</b></div>` });
-  return { el, set() {} };
-}
-
 function previewTab(ctx) {
   const t = ctx.tab || {};
   const el = h('div', { class: 'iw-pv iw-pv--tab', html: `<div class="iw-pv-tab__icon">${GLYPHS[t.icon] || GLYPHS.gear}</div>
@@ -902,7 +895,6 @@ export function createPreview(key, ctx = {}) {
     case 'colorblind': return previewColorblind(ctx);
     case 'difficulty': return previewDifficulty(ctx);
     case 'matchLength': return previewLength(ctx);
-    case '_howto': return previewLink(ctx);
     case '_reset': return previewReset(ctx);
     default: return previewTab(ctx);
   }

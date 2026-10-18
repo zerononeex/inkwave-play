@@ -65,6 +65,13 @@ export class PlayerController {
       rig.pitch -= tch.aimDy * sens * 0.8 * inv;
       lookActive = true;
     }
+    // a held FIRE / SWIM finger slid off its start point: a right stick (same response curve as the pad's)
+    if (inp.touchMode && !mapUp && tch.aimStick.mag > 0) {
+      const a = tch.aimStick, c = lookCurve(a.mag) / a.mag, ts = s.touchSensitivity ?? 1;
+      rig.yaw -= a.x * c * 3.2 * ts * friction * dt;
+      rig.pitch -= a.y * c * 2.2 * ts * friction * dt * inv;
+      lookActive = true;
+    }
     if (inp.pad && !mapUp) {
       inp.padStick(2, 3, _stick, 0.11, 0.96);
       const ps = s.padSensitivity ?? 1;

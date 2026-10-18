@@ -354,7 +354,6 @@
 .iw-map__jline svg { position: absolute; left: 0; top: 0; overflow: visible; }
 .iw-map__jline path { fill: none; stroke: #fff; stroke-width: 3.5; stroke-dasharray: 2 9; stroke-linecap: round; filter: drop-shadow(0 0 1.5px var(--k)) drop-shadow(0 0 1.5px var(--k)); animation: iw-jline .5s linear infinite; }
 @keyframes iw-jline { to { stroke-dashoffset: -11; } }
-.iw-row__link { display: inline-flex; align-items: center; gap: .35em; } /* (settings link row — kept here from the old combined sheet) */
 
 /* ------------------------------------------------------------------ ally markers + ally-down pings */
 .iw-mk { position: absolute; left: 0; top: 0; width: 0; height: 0; opacity: calc(1 - var(--far, 0) * .45); }

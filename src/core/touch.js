@@ -4,14 +4,17 @@
 //   left ~40%   floating joystick: appears under the thumb, follows it (radial dead zone + curve: radialStick)
 //   right side  drag anywhere that isn't a button to aim
 //   buttons     FIRE (hold) · SWIM (hold) · JUMP (tap) · BOMB (hold = arc, release = throw) · STAR (special)
+//               a held FIRE or SWIM is also the aim stick: slide that same finger and the camera turns with the offset
+//               from where it landed (joystick-style), so walk + fire + aim needs only two thumbs
 //               MAP (top right, tap to open / close; tap a teammate pin to Super Jump) · ⏸ (top left, pause)
 // Every touch is tracked by pointerId, so stick + aim + FIRE (three fingers) all register at once. A touch that starts
-// on a button stays that button's (pointer capture) and never aims; an aim drag never presses a button.
+// on a button stays that button's (pointer capture); an open-area aim drag never presses a button.
 // Shown when settings.touchControls is 'on', or 'auto' on a coarse-pointer device / after the first touch.
 import { G } from './ctx.js';
 import { radialStick } from './input.js';
 
 const STICK_R = 60;          // px of thumb travel for full deflection
+const AIM_R = 70;            // held FIRE / SWIM: px of slide for full aim-stick deflection
 const LEFT_ZONE = 0.4;       // share of the screen width that spawns the joystick
 
 const ICON = {
@@ -34,10 +37,11 @@ export const TOUCH_BUTTONS = [
 export const touchIcon = (k) => ICON[k] || '';
 
 /** Is this a touch device as far as Auto is concerned? (true once a finger has touched the page) */
-let sawTouch = false;
+let sawTouch = false, coarse = null;
 export function isTouchDevice() {
   if (sawTouch) return true;
-  try { return !!(window.matchMedia && matchMedia('(pointer: coarse)').matches); } catch { return false; }
+  if (coarse === null) { try { coarse = !!(window.matchMedia && matchMedia('(pointer: coarse)').matches); } catch { coarse = false; } }
+  return coarse;
 }
 /** settings.touchControls: 'auto' (default) | 'on' | 'off' */
 export function touchWanted(settings) {
@@ -83,12 +87,26 @@ export class TouchControls {
     // ---- buttons: each finger is its own (pointer capture keeps it even if the thumb slides off)
     const T = input.touch;
     const hold = { fire: 'fire', swim: 'squid', bomb: 'sub', jump: 'jump', star: 'special' };
+    const aims = (key) => key === 'fire' || key === 'swim';
     for (const [key, el] of Object.entries(this.btns)) {
       const ids = new Set();
+      const ico = el.querySelector('.iw-tb__ico');
       const up = (e) => {
         if (!ids.delete(e.pointerId)) return;
+        if (this.aimBtn && this.aimBtn.id === e.pointerId) this._aimStickOff();
         if (!ids.size) { el.classList.remove('is-down'); if (hold[key]) T[hold[key]] = false; }
       };
+      if (aims(key)) {
+        el.addEventListener('pointermove', (e) => {
+          const A = this.aimBtn;
+          if (!A || A.id !== e.pointerId) return;
+          e.preventDefault();
+          const dx = e.clientX - A.x0, dy = e.clientY - A.y0;
+          radialStick(dx / AIM_R, dy / AIM_R, T.aimStick, 0.14, 0.96);
+          const d = Math.hypot(dx, dy), k = d > 18 ? 18 / d : 1;   // the icon leans toward the slide (feedback)
+          if (ico) ico.style.transform = `translate3d(${(dx * k).toFixed(1)}px,${(dy * k).toFixed(1)}px,0)`;
+        });
+      }
       el.addEventListener('pointerdown', (e) => {
         e.preventDefault(); e.stopPropagation();
         try { el.setPointerCapture(e.pointerId); } catch { /* old browsers */ }
@@ -96,6 +114,8 @@ export class TouchControls {
         el.classList.add('is-down');
         input.lastDevice = 'touch';
         if (hold[key]) T[hold[key]] = true;
+        // the newest held FIRE / SWIM finger steers the aim
+        if (aims(key)) { if (this.aimBtn) this._aimStickOff(); this.aimBtn = { id: e.pointerId, x0: e.clientX, y0: e.clientY, ico }; }
         if (key === 'jump') T.jumpTap = true;
         if (key === 'star') T.specialTap = true;
         if (key === 'map') this._setMap(!T.map);
@@ -169,8 +189,16 @@ export class TouchControls {
   /** The map closes after a successful Super Jump (diorama.js). */
   closeMap() { if (this.input.touch.map) this._setMap(false); }
 
+  _aimStickOff() {
+    const A = this.aimBtn;
+    this.aimBtn = null;
+    const s = this.input.touch.aimStick; s.x = s.y = s.mag = 0;
+    if (A && A.ico) A.ico.style.transform = '';
+  }
+
   _release() {
     const T = this.input.touch;
+    this._aimStickOff();
     T.fire = T.squid = T.jump = T.sub = T.special = false;
     T.jumpTap = T.specialTap = false; T.aimDx = T.aimDy = 0; T.tap = null;
     this._setMap(false);

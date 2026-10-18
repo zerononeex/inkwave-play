@@ -1121,10 +1121,15 @@ export class HUD {
     const u = Math.min(W / 100, (H * 1.7778) / 100);
     const asp = (m.canvas.width || 1) / (m.canvas.height || 1);
     const fit = (sz) => (asp >= 1 ? [sz, sz / asp] : [sz * asp, sz]);
-    const [w0, h0] = fit(14.5 * u), [w1, h1] = fit(Math.min(H * 0.78, W * 0.6));
+    // touch play: the bottom-left belongs to the movement thumb — the minimap sits small in the top-left corner, under
+    // the ⏸ button (touch.css .iw-tb--pause: 12 px + 56 px from the top)
+    const touch = !!G.input?.touchMode;
+    const [w0, h0] = fit((touch ? 11 : 14.5) * u), [w1, h1] = fit(Math.min(H * 0.78, W * 0.6));
     const t = this._mapT;
     const bw = lerp(w0, w1, t), bh = lerp(h0, h1, t);
-    const x = lerp(2.2 * u, (W - w1) / 2, t), y = lerp(H - 2.2 * u - h0, (H - h1) / 2 + u * 1.2, t);
+    const x0 = touch ? 14 + this._safe('left') : 2.2 * u, y0 = touch ? 84 + this._safe('top') : H - 2.2 * u - h0;
+    const x = lerp(x0, (W - w1) / 2, t), y = lerp(y0, (H - h1) / 2 + u * 1.2, t);
+    if (touch !== L.mapTouch) { L.mapTouch = touch; this.map.classList.toggle('is-touch', touch); }
     const inside = (W - w1) / 2 < 22 * u;
     if (inside !== L.lgIn) { L.lgIn = inside; this.mapLegend.classList.toggle('is-inside', inside); }
     const box = `${x.toFixed(1)},${y.toFixed(1)},${bw.toFixed(1)},${bh.toFixed(1)}`;
@@ -1326,6 +1331,13 @@ export class HUD {
     this.promptEl.innerHTML = richText(v);
     this.promptEl.classList.remove('is-out');
     this.promptEl.animate([{ transform: 'translateX(-50%) translateY(12px) scale(.85)', opacity: 0 }, { transform: 'translateX(-50%) translateY(0) scale(1)', opacity: 1 }], { duration: 380, easing: 'cubic-bezier(.34,1.56,.64,1)' });
+  }
+
+  // CSS safe-area inset in px (0 unless the page extends under a notch)
+  _safe(side) {
+    const c = this._safeC || (this._safeC = {});
+    if (c[side] == null) { const d = document.createElement('div'); d.style.cssText = `position:fixed;visibility:hidden;width:env(safe-area-inset-${side},0px)`; document.body.appendChild(d); c[side] = d.offsetWidth || 0; d.remove(); }
+    return c[side];
   }
 
   _updFps(fps, dt) {

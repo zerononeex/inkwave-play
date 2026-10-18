@@ -10,7 +10,7 @@ import {
 } from './ui-util.js';
 import {
   WEAPON_ICONS, SUB_ICONS, SQUID, GLYPHS, SPLAT_ICON, DEATH_ICON, keycap, mouseGlyph, padGlyph,
-  richText, logoMarkup, mapThumb, RULE_ART, weaponIcon, specialIcon,
+  richText, logoMarkup, mapThumb, weaponIcon, specialIcon,
 } from './ui-icons.js';
 import {
   GAME_TITLE, GAME_SUBTITLE, VERSION, WEAPONS, WEAPON_ORDER, SPECIALS, SUB, MAPS, DIFFICULTY, MATCH, QUALITY,
@@ -24,14 +24,13 @@ import {
   sweepEdge, sweepClip, splatClip, splatCover, skinSwatch, irisSwatch, outfitIcon, tagArt, inkBand, dripsSVG, computeBossAwards,
 } from './menu-art.js';
 import { bossSilhouette, bossEmblem, BOSS_GLYPH, BOSS_NAME, BOSS_EPITHET } from './boss-art.js';
-import { WhatsNew } from './news.js';
 import { TOUCH_BUTTONS, touchIcon, touchWanted } from '../core/touch.js';
 
-const SCREENS = ['loading', 'title', 'main', 'mode', 'loadout', 'setup', 'locker', 'settings', 'howto', 'touchhelp', 'credits', 'pause', 'results', 'online', 'lobby'];
+const SCREENS = ['loading', 'title', 'main', 'mode', 'loadout', 'setup', 'locker', 'settings', 'touchhelp', 'pause', 'results', 'online', 'lobby'];
 // Transitions that get the full-screen ink wipe (the rest use staggered pop-ins).
 const WIPES = new Set(['loading>title', 'title>main', 'results>main', 'pause>main', 'results>null', 'pause>title', 'online>lobby', 'lobby>online', 'lobby>main', 'results>lobby', 'pause>online']);
 // Pushes/pops between these get the light ink swipe (decorative — the swap itself is immediate).
-const LIGHT = new Set(['main', 'mode', 'loadout', 'setup', 'locker', 'settings', 'howto', 'touchhelp', 'credits', 'pause', 'online', 'lobby']);
+const LIGHT = new Set(['main', 'mode', 'loadout', 'setup', 'locker', 'settings', 'touchhelp', 'pause', 'online', 'lobby']);
 // ?netmock=1 → an offline stand-in for G.net (src/net/mock.js) so the Play Together screens work offline
 const NETMOCK = typeof location !== 'undefined' && new URLSearchParams(location.search).get('netmock') === '1';
 // room codes (the session generates them from this set: no O/0, I/1)
@@ -106,9 +105,7 @@ const MENU_DESC = {
   loadout: 'Choose your weapon: stats, sub and special for every kind',
   locker: 'Choose your squidkid — tentacles, headgear, eyes, skin and outfit',
   settings: 'Controls, video, audio and gameplay options',
-  howto: 'The rules in 30 seconds, plus every control',
   touchhelp: 'The five touch buttons, one line each',
-  credits: 'The squidkids and code behind INKWAVE',
 };
 
 const pctFmt = (v) => Math.round(v * 100) + '%';
@@ -121,7 +118,6 @@ const SETTINGS_TABS = [
     { key: 'touchSensitivity', label: 'Touch sensitivity', type: 'slider', min: 0.2, max: 3, step: 0.05, fmt: (v) => v.toFixed(2) + '×', help: 'How far the camera turns when you drag on the right side of the screen.' },
     { key: 'aimAssist', label: 'Aim assist (controller)', type: 'slider', min: 0, max: 1, step: 0.05, fmt: pctFmt, help: 'Gently slows and steers your aim onto nearby rivals when you play with a controller.' },
     { key: 'aimAssistMouse', label: 'Aim assist for mouse', type: 'toggle', help: 'Also apply a lighter aim assist when aiming with a mouse. Off by default.' },
-    { key: '_howto', label: 'Controls reference', type: 'link', help: 'Every keyboard, mouse and controller binding in one place.' },
   ] },
   { id: 'video', label: 'Video', icon: 'monitor', rows: [
     { key: 'quality', label: 'Graphics quality', type: 'seg', options: [['low', 'Low'], ['medium', 'Med'], ['high', 'High'], ['ultra', 'Ultra']], help: 'Resolution scale, shadow detail, anti-aliasing and particle counts.' },
@@ -145,7 +141,7 @@ const SETTINGS_TABS = [
   ] },
 ];
 const TAB_BLURB = {
-  controls: 'Look speed, invert, aim assist and the full control reference.',
+  controls: 'Look speed, invert, aim assist and touch controls.',
   video: 'Quality tier, field of view and screen effects.',
   audio: 'Master, music and sound-effect levels.',
   gameplay: 'Shake, vibration, colour-safe inks, minimap and match defaults.',
@@ -201,7 +197,6 @@ export class Menus {
     this._loop = this._loop.bind(this);
     this._raf = requestAnimationFrame(this._loop);
     if (NETMOCK) import('../net/mock.js').then((m) => { this._mockMod = m; }, (e) => console.error('[menus] netmock', e));
-    this._news = new WhatsNew(this);   // "What's New" launch cards (src/ui/news.js): once per update, on the first main menu
   }
 
   // ================================================================ public API
@@ -477,7 +472,6 @@ export class Menus {
     if (!f) f = scr.el.querySelector('[data-nav]');
     if (f) this._setFocus(f, { snap: true });
     if (scr.afterMount) scr.afterMount();
-    if (name === 'main') this._news.maybeShow();
   }
 
   /** mode: 'full' (organic ink pour; mid ≈ 380 ms, clear ≈ 1000 ms) · 'light' (quick swipe) · reduced motion → 'fade'. */
@@ -497,7 +491,7 @@ export class Menus {
     if (this._stack.length > 1) {
       this._sfx('ui_back');
       this.show(this._stack[this._stack.length - 2], { pop: true, back: true });
-    } else if (['mode', 'loadout', 'setup', 'locker', 'settings', 'howto', 'credits', 'online'].includes(this.current)) {
+    } else if (['mode', 'loadout', 'setup', 'locker', 'settings', 'online'].includes(this.current)) {
       this._sfx('ui_back'); // opened directly by the engine: fall back to the main menu
       this.show('main', { back: true });
     }
@@ -833,9 +827,7 @@ export class Menus {
       { id: 'loadout', label: 'LOADOUT', icon: weaponIcon(W.kind || lo.weapon), cls: 'iw-btn--menu', accept: () => this._go('loadout') },
       { id: 'locker', label: 'LOCKER', icon: GLYPHS.hanger, cls: 'iw-btn--menu', accept: () => this._go('locker') },
       { id: 'settings', label: 'SETTINGS', icon: GLYPHS.gear, cls: 'iw-btn--menu', accept: () => this._go('settings') },
-      { id: 'howto', label: 'HOW TO PLAY', icon: GLYPHS.question, cls: 'iw-btn--menu', accept: () => this._go('howto') },
       touchWanted(G.settings) ? { id: 'touchhelp', label: 'HOW TO PLAY ON iPAD', icon: touchIcon('fire'), cls: 'iw-btn--menu', accept: () => this._go('touchhelp') } : null,
-      { id: 'credits', label: 'CREDITS', icon: GLYPHS.star, cls: 'iw-btn--menu', accept: () => this._go('credits') },
     ].filter(Boolean);
     const tilts = [-2.2, 1.3, 1.4, -1.1, 1.6, -1.3, 1.1];
     const btns = items.map((it, i) => { const b = this._btn({ ...it, tilt: tilts[i % tilts.length] }); b.classList.add('iw-in', 'iw-in--left'); return b; });
@@ -1947,8 +1939,7 @@ export class Menus {
       const tab = SETTINGS_TABS[tabIdx];
       tab.rows.forEach((r, i) => {
         let ctrl;
-        if (r.type === 'link') ctrl = { el: h('span', { class: 'iw-row__link' }, 'VIEW', h('i', { html: GLYPHS.next })), accept: () => { this._sfx('ui_click'); this._go('howto'); } };
-        else if (r.type === 'slider') ctrl = this._slider(r, s[r.key]);
+        if (r.type === 'slider') ctrl = this._slider(r, s[r.key]);
         else if (r.type === 'toggle') ctrl = this._toggle(r, s[r.key]);
         else {
           let options = r.options;
@@ -2058,7 +2049,7 @@ export class Menus {
     };
   }
 
-  // ================================================================ SCREEN: howto
+  // ================================================================ controls list (pause menu QUICK CONTROLS)
   _controlsList(mode, compact = false) {
     const K = (...ks) => ks.map((k) => (k === 'or' ? '<em>or</em>' : k === 'LMB' ? mouseGlyph('L') : k === 'RMB' ? mouseGlyph('R') : k === 'MOUSE' ? mouseGlyph('M') : keycap(k))).join('');
     const rows = [
@@ -2079,42 +2070,6 @@ export class Menus {
         h('span', { class: 'iw-ctl__keys', html: mode === 'pad' ? pad : kb }))));
   }
 
-  _scr_howto() {
-    const rules = [
-      ['turf', 'Ink the turf', 'Paint the ground in your team’s color. When time runs out, the team with the most turf wins.'],
-      ['swim', 'Swim to refill', 'Dive into your own ink as a squid to move fast, hide and refill your ink tank.'],
-      ['enemy', 'Avoid enemy ink', 'Enemy ink slows you down and hurts. Paint over it to take the ground back.'],
-      ['climb', 'Climb inked walls', 'Ink a wall, then swim straight up it as a squid to reach high ground.'],
-    ];
-    const cards = rules.map(([art, title, text], i) => h('div', { class: 'iw-rule iw-in iw-in--pop', style: { '--tilt': `${[-1.2, 1, 0.8, -1][i]}deg` } },
-      h('div', { class: 'iw-rule__art', html: RULE_ART[art] }),
-      h('div', { class: 'iw-rule__num' }, String(i + 1)),
-      h('div', { class: 'iw-rule__title' }, title),
-      h('p', { class: 'iw-rule__text' }, text)));
-    let mode = this._input;
-    const listWrap = h('div', { class: 'iw-ctl-wrap' });
-    const renderList = () => { listWrap.innerHTML = ''; listWrap.appendChild(this._controlsList(mode)); restartAnim(listWrap, 'is-in'); };
-    const seg = this._seg([['kbm', h('span', { class: 'iw-segico' }, h('i', { html: GLYPHS.keyboard }), 'KEYBOARD & MOUSE')], ['pad', h('span', { class: 'iw-segico' }, h('i', { html: GLYPHS.gamepad }), 'CONTROLLER')]], mode, (v) => { mode = v; renderList(); });
-    const segRow = h('div', { class: 'iw-ctl-switch' }, seg.el);
-    this._bind(segRow, { id: 'scheme', type: 'row', adjust: seg.adjust, accept: seg.cycle });
-    renderList();
-    const el = h('div', { class: 'iw-screen iw-howto' },
-      h('div', { class: 'iw-scrim-full' }),
-      this._header('HOW TO PLAY', { sub: 'Turf War in 30 seconds' }),
-      h('div', { class: 'iw-howto__body' },
-        h('div', { class: 'iw-howto__rules' }, cards),
-        this._panel('iw-howto__ctl iw-in iw-in--right', h('div', { class: 'iw-seclabel' }, h('i', { html: GLYPHS.gamepad }), 'CONTROLS'), segRow, listWrap)),
-      this._prompts([[['←', '→'], 'DPad', 'Switch controls'], ['Esc', 'B', 'Back']]));
-    return {
-      el, initial: segRow,
-      onNav: (dir) => {
-        if (dir === 'tab_prev' || dir === 'tab_next') { seg.adjust(dir === 'tab_next' ? 1 : -1); return true; }
-        if (dir === 'up' || dir === 'down') return true; // only one control on this screen
-        return false;
-      },
-    };
-  }
-
   // ================================================================ SCREEN: touchhelp (one no-scroll card for the kids)
   _scr_touchhelp() {
     const btnArt = (key, word) => h('span', { class: `iw-tb iw-tb--${key} iw-thelp__btn` }, h('span', { class: 'iw-tb__ico', html: touchIcon(key) }), h('b', { class: 'iw-tb__w' }, word));
@@ -2131,49 +2086,6 @@ export class Menus {
       this._prompts([['Esc', 'B', 'Back']]));
     el.style.setProperty('--tc', this._accent()[0]);
     return { el, noCursor: true, onNav: (dir) => dir === 'up' || dir === 'down' || dir === 'left' || dir === 'right' };
-  }
-
-  // ================================================================ SCREEN: credits
-  _scr_credits() {
-    const sec = (title, ...lines) => h('section', { class: 'iw-cred__sec' }, h('h3', null, title), lines.map((l) => (typeof l === 'string' ? h('p', null, l) : l)));
-    const cast = h('div', { class: 'iw-cred__cast' }, BOT_NAMES.map((n, i) => h('span', { style: { '--c': i % 2 ? 'var(--b)' : 'var(--a)' } }, h('i', { html: SQUID }), n)));
-    const roll = h('div', { class: 'iw-cred__roll' },
-      h('div', { class: 'iw-cred__logo', html: logoMarkup(GAME_TITLE, GAME_SUBTITLE, 'md') }),
-      h('p', { class: 'iw-cred__lead' }, 'An original 4 v 4 turf-war shooter.'),
-      sec('Made with', 'Procedural everything — squidkids, weapons, stage, ink, music and sound are all generated in code.'),
-      sec('Rendering', 'three.js', h('p', { class: 'dim' }, 'by the three.js authors & contributors')),
-      sec('Typography', 'Titan One — Font Diner', 'Rubik — Hubert & Fischer', h('p', { class: 'dim' }, 'SIL Open Font License')),
-      sec('Starring the squidkids', cast),
-      sec('Special thanks', 'Everyone who ever painted a wall', 'Every bot that got splatted in testing', 'And you, for playing'),
-      h('div', { class: 'iw-cred__end' }, h('div', { class: 'iw-cred__endsplat', html: splatSVG({ seed: 77, cls: 'iw-fa' }) }), h('span', { class: 'iw-display' }, 'STAY FRESH!')));
-    const viewport = h('div', { class: 'iw-cred__view' }, roll);
-    const el = h('div', { class: 'iw-screen iw-credits' },
-      h('div', { class: 'iw-scrim-full' }),
-      this._header('CREDITS'),
-      viewport,
-      this._prompts([['Enter', 'A', 'Hold to speed up'], ['Esc', 'B', 'Back']]));
-    let y = null, boost = 0, vh = 0, rh = 0, measureT = 0;
-    return {
-      el, noCursor: true,
-      onNav: (dir) => {
-        if (dir === 'accept' || dir === 'down') { boost = 0.35; return true; }
-        if (dir === 'up') { boost = -0.35; return true; }
-        return false;
-      },
-      onHold: () => { boost = 0.35; },
-      tick: (dt) => {
-        // measure rarely (reads), then only write transforms
-        measureT -= dt;
-        if (measureT <= 0 || !vh) { vh = viewport.clientHeight; rh = roll.offsetHeight; measureT = 0.5; }
-        if (y === null) y = vh * 0.62;
-        const speed = boost > 0 ? 260 : boost < 0 ? -140 : 42;
-        boost = boost > 0 ? Math.max(0, boost - dt) : Math.min(0, boost + dt);
-        y -= speed * dt;
-        if (y < -rh + vh * 0.35) y = vh;
-        if (y > vh) y = vh;
-        roll.style.transform = `translate3d(0,${y.toFixed(1)}px,0)`;
-      },
-    };
   }
 
   // ================================================================ PLAY TOGETHER: session plumbing
@@ -2339,6 +2251,23 @@ export class Menus {
       this._header('PLAY TOGETHER', { sub: 'Room code only · 4 v 4 · up to 8 squidkids' }),
       body, me, promptsIdle, promptsEntry, promptsBusy);
 
+    // ---- touch devices: the code boxes aren't a text field (no iOS keyboard) — an on-screen letter pad with only the
+    // code alphabet, shown while the code is being entered
+    let pad = null;
+    if (touchWanted(G.settings)) {
+      const key = (label, cls, fn) => {
+        const k = h('button', { class: `iw-kpad__k${cls ? ' ' + cls : ''}`, type: 'button', tabindex: '-1' }, label);
+        k.addEventListener('pointerdown', (e) => { e.preventDefault(); this._setFocus(join); restartAnim(k, 'is-tap'); fn(); });
+        return k;
+      };
+      pad = h('div', { class: 'iw-kpad', 'aria-label': 'Room code letters' },
+        h('div', { class: 'iw-kpad__keys' }, [...CODE_ABC].map((c) => key(c, '', () => type(c)))),
+        h('div', { class: 'iw-kpad__row' },
+          key(h('span', null, h('i', { html: GLYPHS.back }), 'DELETE'), 'is-del', () => backspace()),
+          key(h('span', null, 'JOIN', h('i', { html: GLYPHS.next })), 'is-go', () => { if (st.mode !== 'connecting') doJoin(); })));
+      el.appendChild(pad);
+    }
+
     // ---- code entry
     const firstEmpty = () => { const i = st.code.findIndex((c) => !c); return i < 0 ? CODE_END : i; };
     const full = () => st.code.every(Boolean);
@@ -2357,8 +2286,9 @@ export class Menus {
       joinBtn.firstChild.textContent = st.mode === 'connecting' ? 'CANCEL' : 'JOIN';
       el.classList.toggle('is-connecting', st.mode === 'connecting' || create.classList.contains('is-busy'));
       el.classList.toggle('is-entry', st.mode === 'entry' || st.mode === 'error');
-      if (st.mode === 'idle') hintEl.textContent = 'Room codes are 6 letters & numbers';
-      else if (st.mode === 'entry') hintEl.textContent = full() ? 'Press JOIN (or Enter) to hop in' : st.input === 'pad' ? '↑↓ pick a letter · A to confirm' : 'Type or paste the code';
+      if (pad) pad.classList.toggle('is-on', st.mode === 'entry' || st.mode === 'error');
+      if (st.mode === 'idle') hintEl.textContent = pad ? 'Tap the boxes to type a 6-letter code' : 'Room codes are 6 letters & numbers';
+      else if (st.mode === 'entry') hintEl.textContent = full() ? (pad ? 'Tap JOIN to hop in' : 'Press JOIN (or Enter) to hop in') : st.input === 'pad' ? '↑↓ pick a letter · A to confirm' : pad ? 'Tap the letters on the pad' : 'Type or paste the code';
     };
     const setMode = (m) => { st.mode = m; render(); };
     const clearError = () => { if (st.mode === 'error') { st.mode = 'entry'; join.classList.remove('is-err'); jstat.classList.remove('is-on'); } };
@@ -2497,15 +2427,26 @@ export class Menus {
       st.busy = true;
       const tok = ++st.token;
       create.classList.add('is-busy');
-      createStatus.textContent = 'Opening a room';
       el.classList.add('is-connecting');
+      // visible progress from tap to lobby: a ticking "connecting" line while the room opens, then "room ready" painted
+      // before the lobby (and its set) take over the frame
+      const t0 = performance.now();
+      let ticker = 0;
+      const tick = () => { if (tok !== st.token || !st.alive) { clearInterval(ticker); return; } createStatus.textContent = `Opening a room… ${Math.max(1, Math.round((performance.now() - t0) / 1000))} s`; };
+      tick();
+      ticker = setInterval(tick, 500);
       try {
         await net.create(this._profile().name);
+        clearInterval(ticker);
+        if (tok !== st.token || !st.alive) return;
+        createStatus.textContent = 'Room ready! Setting up the lobby…';
+        await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
         if (tok !== st.token || !st.alive) return;
         st.busy = false;
         this._sfx('splat_big');
         this.show('lobby', { wipe: true });
       } catch (e) {
+        clearInterval(ticker);
         if (tok !== st.token || !st.alive) return;
         st.busy = false;
         create.classList.remove('is-busy');
@@ -3503,7 +3444,6 @@ export class Menus {
     const items = [
       { id: 'resume', label: online ? 'BACK TO THE MATCH' : 'RESUME', icon: GLYPHS.play, cls: 'iw-btn--menu iw-btn--primary', accept: () => this._resume(), sound: null },
       { id: 'settings', label: 'SETTINGS', icon: GLYPHS.gear, cls: 'iw-btn--menu', accept: () => this._go('settings') },
-      { id: 'howto', label: 'HOW TO PLAY', icon: GLYPHS.question, cls: 'iw-btn--menu', accept: () => this._go('howto') },
       { id: 'quit', label: online ? 'LEAVE ROOM' : 'QUIT MATCH', icon: online ? GLYPHS.exit : GLYPHS.close, cls: 'iw-btn--menu iw-btn--danger', accept: () => this._openModal({
         title: online ? 'LEAVE ROOM?' : 'QUIT MATCH?', danger: true,
         text: online ? 'You\u2019ll leave the match and the room \u2014 a bot takes over your squidkid for the team.' : 'You will leave this Turf War and head back to the lobby. Your turf will not count.',

@@ -77,3 +77,30 @@
 /* main menu with the extra "HOW TO PLAY ON iPAD" entry (touch devices): rows keep their size; the hover description
    line under the stack (no hover on touch) makes room for it */
 .iw-main.iw-main--8 .iw-main__desc { display: none; }
+
+/* ---- PLAY TOGETHER › JOIN: on-screen letter pad (touch devices; menus.js _scr_online) — only the code alphabet,
+   right of the join card while the code is being entered (it covers the kid on the pedestal, nothing else) */
+.iw-kpad { --ks: clamp(52px, calc(var(--u) * 5), 64px); position: absolute; right: calc(var(--u) * 3.4 + var(--sar)); top: calc(var(--u) * 14);
+  display: none; flex-direction: column; gap: 8px; padding: 12px; border-radius: calc(var(--u) * 1.6); background: rgba(21, 18, 28, .92);
+  box-shadow: 0 0 0 3px var(--k), 0 calc(var(--u) * .5) 0 3px rgba(0, 0, 0, .3); pointer-events: auto; touch-action: manipulation; z-index: 3; }
+.iw-kpad.is-on { display: flex; animation: iw-fade .2s; }
+.iw-kpad__keys { display: grid; grid-template-columns: repeat(7, var(--ks)); gap: 6px; }
+.iw-kpad__row { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.iw-kpad__k { display: grid; place-items: center; height: var(--ks); min-width: var(--ks); padding: 0; border: 0; border-radius: 12px; cursor: pointer;
+  background: #fff; color: var(--k); font: 400 calc(var(--ks) * .5) / 1 'Titan One', sans-serif; box-shadow: inset 0 -4px 0 #d9d3e8;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation; transition: transform .06s; }
+.iw-kpad__k.is-tap { animation: iw-kpad-tap .18s ease-out; }
+@keyframes iw-kpad-tap { 40% { transform: scale(.88); } }
+.iw-kpad__k span { display: inline-flex; align-items: center; gap: .4em; font: 900 max(15px, calc(var(--ks) * .3)) / 1 'Rubik', sans-serif; letter-spacing: .06em; }
+.iw-kpad__k i { display: block; width: 1.1em; height: 1.1em; }
+.iw-kpad__k i svg { width: 100%; height: 100%; }
+.iw-kpad__k.is-del { background: #3a3150; color: #fff; box-shadow: inset 0 -4px 0 #241d33; }
+.iw-kpad__k.is-go { background: var(--hv, #ffe066); color: var(--k); box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .18); }
+/* phone landscape: shorter keys, pad pinned near the top so it fits above the bottom bar */
+@media (max-height: 520px) {
+  .iw-kpad { --ks: 46px; top: calc(6px + var(--sat)); padding: 8px; gap: 6px; }
+  .iw-kpad__keys { gap: 5px; }
+}
+
+/* touch play: the minimap moves to the top-left (hud.js); its TAB keycap label means nothing there — MAP opens the map */
+.iw-map.is-touch .iw-map__label { display: none; }

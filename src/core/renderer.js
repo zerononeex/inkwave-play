@@ -102,7 +102,7 @@ export class Renderer {
     const r = this.renderer, q = this.q;
     if (this.composer) { this.composer.renderTarget1.dispose(); this.composer.renderTarget2.dispose(); }
     this.dynScale = this.dynScale || 1;
-    const pr = Math.min(window.devicePixelRatio || 1, q.pixelRatio) * this.dynScale;
+    const pr = this._pr();
     r.setPixelRatio(pr);
     const w = window.innerWidth, h = window.innerHeight;
     r.setSize(w, h);
@@ -156,12 +156,28 @@ export class Renderer {
     if (this.bloom) this.bloom.enabled = !!(this.q.bloom && settings.bloom);
   }
 
+  // render density: the preset's cap × dynamic scale; menuCap (touch devices outside a match) holds it to Low's
+  _pr() {
+    const pr = Math.min(window.devicePixelRatio || 1, this.q.pixelRatio) * (this.dynScale || 1);
+    return this.menuCap ? Math.min(pr, QUALITY.low.pixelRatio) : pr;
+  }
+  /** Menus / lobby on a touch device: Low-equivalent pixel ratio whatever the in-match quality (main.js, per frame). */
+  setMenuCap(on) {
+    on = !!on;
+    if (on === !!this.menuCap) return;
+    this.menuCap = on;
+    const pr = this._pr();
+    this.renderer.setPixelRatio(pr);
+    this.composer.setPixelRatio(pr);
+    this.composer.setSize(this._w, this._h);
+  }
+
   // Dynamic resolution (never on ultra): scale the render density between 0.75 and 1 of the quality preset.
   setDynamicScale(s) {
     s = Math.max(0.75, Math.min(1, s));
     if (Math.abs(s - this.dynScale) < 0.01) return;
     this.dynScale = s;
-    const pr = Math.min(window.devicePixelRatio || 1, this.q.pixelRatio) * s;
+    const pr = this._pr();
     this.renderer.setPixelRatio(pr);
     this.composer.setPixelRatio(pr);
     this.composer.setSize(this._w, this._h);
