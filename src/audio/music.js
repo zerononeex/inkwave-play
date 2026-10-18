@@ -1,6 +1,9 @@
-// INKWAVE — procedural music engine + shared Web Audio DSP core.
+// INKWAVE — music engine (soundtrack files with a procedural fallback) + shared Web Audio DSP core.
 //
-// Everything here is synthesized: no audio files. The DSP helpers (Voice builder `V`, envelopes, noise buffers,
+// Songs play from the soundtrack files in assets/music/ (FILES below): fetched and decoded on first use — only after
+// audio.init() has run from the first user gesture — then looped sample-accurately from an AudioBuffer through the
+// same music bus (music volume / mute / ducking). If a file is missing or won't decode, that song falls back to its
+// procedural version below, so the game is never silent. The procedural songs are synthesized: no audio files. The DSP helpers (Voice builder `V`, envelopes, noise buffers,
 // impulse responses, instrument voices) are exported so src/audio/audio.js can build its SFX with the same parts.
 // All builders take any BaseAudioContext + destination node so they can be rendered through an OfflineAudioContext
 // (see tools/audio-test.mjs).
@@ -1236,11 +1239,73 @@ class Player {
   }
 }
 
+// Soundtrack files, one per song id. Mastered around −10 LUFS; FILE_LEVEL trims them to the procedural mix's level.
+const MUSIC_DIR = new URL('../../assets/music/', import.meta.url).href;
+export const FILES = {
+  title: 'title.mp3', menu: 'menu.mp3', battle: 'battle.mp3', battle_final: 'battle-final.mp3',
+  results_win: 'results-win.mp3', results_lose: 'results-lose.mp3', boss: 'boss-1.mp3', boss_2: 'boss-2.mp3', boss_3: 'boss-3.mp3',
+};
+const FILE_LEVEL = 0.6;
+// decoded while this track plays so the switch is instant (boss phases escalate mid-fight, the last minute arrives)
+const NEXT = { battle: ['battle_final'], boss: ['boss_2'], boss_2: ['boss_3'] };
+
+// loop between the first and last audible samples (skips MP3 encoder padding at either end, ≤ 0.25 s)
+function loopPoints(buf) {
+  const chans = []; for (let c = 0; c < buf.numberOfChannels; c++) chans.push(buf.getChannelData(c));
+  const n = buf.length, lim = Math.min(n >> 2, Math.round(buf.sampleRate * 0.25)), loud = (i) => chans.some((d) => Math.abs(d[i]) > 1e-4);
+  let a = 0, b = n - 1;
+  while (a < lim && !loud(a)) a++;
+  while (b > n - 1 - lim && !loud(b)) b--;
+  return [a / buf.sampleRate, (b + 1) / buf.sampleRate];
+}
+
+// One soundtrack file, looping; same surface as Player for the engine (fades, stopAt, pump, dispose).
+class FilePlayer {
+  constructor(eng, id, buf, t0) {
+    const ctx = (this.ctx = eng.ctx);
+    this.eng = eng; this.id = id; this.song = null; this.file = true;
+    this.stopAt = Infinity; this.disposed = false;
+    this.g = ctx.createGain(); this.g.gain.value = 0; this.g.connect(eng.fileOut);
+    const src = (this.src = ctx.createBufferSource());
+    const [ls, le] = loopPoints(buf);
+    src.buffer = buf; src.loop = true; src.loopStart = ls; src.loopEnd = le;
+    src.connect(this.g);
+    src.start(t0, ls);
+  }
+  fadeAt(t) { return Player.prototype.fadeAt.call(this, t); }
+  fadeIn(t, dur) {
+    dur = Math.max(0.005, dur);
+    this.g.gain.setValueAtTime(0, t); this.g.gain.linearRampToValueAtTime(1, t + dur);
+    this.fadeSeg = { t0: t, v0: 0, t1: t + dur, v1: 1 };
+  }
+  fadeOut(t, dur) {
+    dur = Math.max(0.01, dur);
+    const v = this.fadeAt(t), p = this.g.gain;
+    p.cancelScheduledValues(t); p.setValueAtTime(v, t); p.linearRampToValueAtTime(0, t + dur);
+    this.fadeSeg = { t0: t, v0: v, t1: t + dur, v1: 0 };
+    this.stopAt = Math.min(this.stopAt, t + dur + 0.02);
+    try { this.src.stop(this.stopAt + 0.05); } catch (e) { /* already stopping */ }
+  }
+  pump() {}
+  setIntensity() {}
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    try { this.src.stop(); } catch (e) { /* */ }
+    try { this.src.disconnect(); this.g.disconnect(); } catch (e) { /* */ }
+  }
+}
+
 const LOOKAHEAD = 0.16, TICK_MS = 25;
 
 export class MusicEngine {
   constructor() {
     this.ctx = null; this.players = []; this.current = null; this.intensity = 1; this._want = undefined;
+    this._bytes = new Map();     // id → Promise<ArrayBuffer> (encoded file; small)
+    this._decoding = new Map();  // id → Promise<AudioBuffer>
+    this._buffers = new Map();   // id → AudioBuffer (decoded; big, so only the playing + next tracks are kept)
+    this._fileFail = new Set();  // ids whose file 404'd / failed to decode → procedural from then on
+    this._req = 0; this._pending = null;
   }
   get track() { return this.current ? this.current.id : null; }
   get tracks() { return Object.keys(SONGS); }
@@ -1257,6 +1322,8 @@ export class MusicEngine {
     comp.threshold.value = -18; comp.knee.value = 10; comp.ratio.value = 3; comp.attack.value = 0.01; comp.release.value = 0.2;
     this.out = g(opt.level ?? 0.42);   // music bus sits ~−14 LUFS at full volume, under the SFX
     this.mix.connect(hp); hp.connect(comp); comp.connect(this.out); this.out.connect(dest);
+    this.fileOut = g(FILE_LEVEL);      // soundtrack files: already mastered, straight onto the music bus
+    this.fileOut.connect(dest);
     // ping-pong delay (dotted 8th, set per track)
     this.dlyIn = g(1);
     const dhp = ctx.createBiquadFilter(); dhp.type = 'highpass'; dhp.frequency.value = 350;
@@ -1274,7 +1341,7 @@ export class MusicEngine {
     const conv = ctx.createConvolver(); conv.buffer = makeImpulse(ctx, 2.2, 2.4, { seed: 5, bright: 0.7, dark: 0.08 });
     const rOut = g(0.5);
     this.revIn.connect(conv); conv.connect(rOut); rOut.connect(this.mix);
-    this._nodes = [this.mix, hp, comp, this.out, this.dlyIn, dhp, dlp, this.dA, this.dB, fbA, fbB, dOut, pl, pr, this.revIn, conv, rOut];
+    this._nodes = [this.fileOut, this.mix, hp, comp, this.out, this.dlyIn, dhp, dlp, this.dA, this.dB, fbA, fbB, dOut, pl, pr, this.revIn, conv, rOut];
     if (!this.offline) this._startTimer();
     const w = this._want; this._want = undefined;
     if (w !== undefined) this.play(w.track, w.opts);
@@ -1302,8 +1369,48 @@ export class MusicEngine {
     for (const p of this.players) p.pump(now + LOOKAHEAD, now);
     for (let i = this.players.length - 1; i >= 0; i--) {
       const p = this.players[i];
-      if (p.stopAt + 4 < now) { p.dispose(); this.players.splice(i, 1); }
+      if (p.stopAt + 4 < now) { p.dispose(); this.players.splice(i, 1); this._trim(); }
     }
+  }
+
+  // ---- soundtrack files
+  _useFile(track) { return !!(FILES[track] && !this._fileFail.has(track) && !this.offline && typeof fetch === 'function'); }
+  _fetch(track) {
+    let p = this._bytes.get(track);
+    if (!p) {
+      p = fetch(MUSIC_DIR + FILES[track]).then((r) => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.arrayBuffer(); });
+      p.catch(() => this._bytes.delete(track));
+      this._bytes.set(track, p);
+    }
+    return p;
+  }
+  _decode(track) {
+    const have = this._buffers.get(track);
+    if (have) return Promise.resolve(have);
+    let p = this._decoding.get(track);
+    if (p) return p;
+    const ctx = this.ctx;
+    p = this._fetch(track)
+      .then((bytes) => new Promise((ok, fail) => {   // (callback form too: older Safari)
+        const r = ctx.decodeAudioData(bytes.slice(0), ok, fail);
+        if (r && r.then) r.then(ok, fail);
+      }))
+      .then((buf) => { if (this.ctx === ctx) { this._buffers.set(track, buf); this._trim(); } return buf; })
+      .finally(() => this._decoding.delete(track));
+    this._decoding.set(track, p);
+    return p;
+  }
+  // warm what this track leads to (next boss phase, the last-minute battle track); a failure here just means the
+  // request itself will retry / fall back later
+  _prefetch(track) {
+    for (const n of NEXT[track] || []) if (this._useFile(n)) this._decode(n).catch(() => {});
+  }
+  // drop decoded songs nothing is playing or about to play (a 2-minute track is ~45 MB decoded)
+  _trim() {
+    const keep = new Set(this.players.filter((p) => p.file && !p.disposed).map((p) => p.id));
+    const cur = this.current?.id ?? null, want = this._pending?.track ?? null;
+    for (const t of [cur, want]) if (t) { keep.add(t); for (const n of NEXT[t] || []) keep.add(n); }
+    for (const id of [...this._buffers.keys()]) if (!keep.has(id)) this._buffers.delete(id);
   }
 
   // offline driving (tests): move the virtual clock and schedule
@@ -1314,18 +1421,45 @@ export class MusicEngine {
     if (this.remap) { try { const r = this.remap(track); if (r !== undefined) track = r; } catch (e) { /* keep the request */ } }
     const fade = Math.max(0, opts.fade ?? 1.0);
     if (track != null && !SONGS[track]) { console.warn('[music] unknown track', track); return; }
-    if (!this.ctx) { this._want = { track, opts }; return; }
+    if (!this.ctx) { this._want = { track, opts }; return; }   // nothing (not even a fetch) before audio.init()
+    const cur = this.current;
+    if (this._pending && this._pending.track === track) return;   // already loading this one
+    this._req++; this._pending = null;                            // a newer request cancels a load in flight
+    if (cur && cur.id === track) return;
+    if (track != null && this._useFile(track)) {
+      const buf = this._buffers.get(track);
+      if (buf) { this._start(track, opts, fade, buf); return; }
+      // keep the current music going while the file loads, then crossfade; on a 404 / bad file → procedural
+      const req = this._req, ctx = this.ctx;
+      this._pending = { track };
+      this._decode(track).then(
+        (b) => { if (req === this._req && this.ctx === ctx) { this._pending = null; this._start(track, opts, fade, b); } },
+        (e) => {
+          console.warn(`[music] ${FILES[track]} unavailable (${e && e.message ? e.message : e}) — procedural '${track}' instead`);
+          this._fileFail.add(track);
+          if (req === this._req && this.ctx === ctx) { this._pending = null; this._start(track, opts, fade, null); }
+        });
+      return;
+    }
+    this._start(track, opts, fade, null);
+  }
+
+  // switch to `track` now: a decoded soundtrack file (buf) or the procedural song
+  _start(track, opts, fade, buf) {
     const cur = this.current;
     if (cur && cur.id === track) return;
     const now = this.now();
     if (track == null) { if (cur) cur.fadeOut(now, Math.max(0.03, fade)); this.current = null; return; }
-    const song = getSong(track);
-    let t0 = now + 0.06, sync = false;
-    if (cur && fade > 0 && cur.song.bpm === song.bpm) { t0 = cur.nextBarTime(now + 0.12); sync = true; }
-    const p = new Player(this, track, t0, opts);
+    let t0 = now + 0.06, sync = false, p;
+    if (buf) p = new FilePlayer(this, track, buf, t0);
+    else {
+      const song = getSong(track);
+      if (cur && cur.song && fade > 0 && cur.song.bpm === song.bpm) { t0 = cur.nextBarTime(now + 0.12); sync = true; }
+      p = new Player(this, track, t0, opts);
+      const beat = 60 / song.bpm;
+      this.dA.delayTime.setTargetAtTime(beat * 0.75, t0, 0.05); this.dB.delayTime.setTargetAtTime(beat * 0.75, t0, 0.05);
+    }
     this.players.push(p);
-    const beat = 60 / song.bpm;
-    this.dA.delayTime.setTargetAtTime(beat * 0.75, t0, 0.05); this.dB.delayTime.setTargetAtTime(beat * 0.75, t0, 0.05);
     if (cur) {
       if (sync) {
         // beat-matched escalation: old track plays to the bar line with a riser, new one lands on the downbeat
@@ -1337,8 +1471,10 @@ export class MusicEngine {
         cur.fadeOut(now, Math.max(0.03, fade));
         p.fadeIn(t0, fade > 0 ? fade * 0.5 : 0.01);
       }
-    } else p.fadeIn(t0, 0.01);
+    } else p.fadeIn(t0, buf ? Math.min(0.6, Math.max(0.01, fade * 0.5)) : 0.01);
     this.current = p;
+    this._trim();
+    if (buf) this._prefetch(track);
     this._tick();
   }
 
@@ -1354,6 +1490,7 @@ export class MusicEngine {
   dispose() {
     for (const p of this.players) p.dispose();
     this.players.length = 0; this.current = null;
+    this._req++; this._pending = null; this._buffers.clear(); this._decoding.clear();
     if (this.worker) { this.worker.postMessage(0); this.worker.terminate(); this.worker = null; }
     if (this.timer) { clearInterval(this.timer); this.timer = null; }
     for (const n of this._nodes || []) { try { n.disconnect(); } catch (e) { /* */ } }
